@@ -1,0 +1,14 @@
+# prod.yaml - PROD environment overrides
+
+variables:
+  databricks_host: "https://adb-3456789012345678.9.azuredatabricks.net"
+  catalog_name: "tvmaze_catalog"
+  node_type_id: "Standard_DS5_v2"
+  num_workers: "4"
+  min_workers: 2
+  max_workers: 8
+  max_shows: "1000"
+  schedule_pause_status: "UNPAUSED"  # live schedule
+
+# Key Vault: kv-tvmaze-prod / secret scope: tvmaze-prod-scope
+# Spot instances and 30-min auto-termination configured at workspace level

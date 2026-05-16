@@ -1,0 +1,168 @@
+# azure-pipelines.yml
+# CI/CD for TVMaze data pipeline - Build + DEV deploy.
+# ACC and PROD stages will be added once approval gates are configured in Azure DevOps.
+# Author: Samed Budak
+#
+# -------------------------------------------------------
+# Git branching strategy (GitFlow-lite):
+#   main     - production-ready code, tagged releases
+#   develop  - integration branch, auto-deploys to DEV
+#   feature/ - short-lived branches off develop for new work
+#   release/ - cut from develop when ready for ACC/PROD
+#   hotfix/  - emergency patches off main
+#
+# Promotion flow:
+#   1. Developer pushes to feature/* -> PR into develop
+#   2. Merge to develop triggers Build + auto-deploy to DEV
+#   3. Cut release/* branch -> deploy to ACC (manual approval gate)
+#   4. Merge release/* to main -> deploy to PROD (manual approval + business-hours gate)
+#   5. Notebooks are deployed via DABs (databricks bundle deploy -t <env>)
+#      so the same bundle.yaml drives all three environments.
+# -------------------------------------------------------
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    include:
+      - notebooks/**
+      - tests/**
+      - bundle/**
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  - group: tvmaze-common-variables
+  - name: pythonVersion
+    value: '3.10'
+
+stages:
+  # -------------------------------------------------------
+  # Build: install deps, run tests, validate bundle, publish
+  # -------------------------------------------------------
+  - stage: Build
+    displayName: 'Build & Validate'
+    jobs:
+      - job: ValidateAndTest
+        displayName: 'Tests + Bundle Validate'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+            clean: true
+
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+            displayName: 'Setup Python'
+
+          - script: |
+              pip install --upgrade pip
+              pip install pyspark==3.5.0 delta-spark==3.0.0 pytest pytest-cov
+              pip install databricks-cli databricks-sdk
+            displayName: 'Install dependencies'
+
+          # Run DQ + unit tests
+          - script: |
+              pytest tests/ -v \
+                --tb=short \
+                --junitxml=test-results/results.xml \
+                --cov=notebooks \
+                --cov-report=xml:coverage/coverage.xml
+            displayName: 'Run tests'
+
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: 'test-results/results.xml'
+              testRunTitle: 'TVMaze DQ Tests'
+            displayName: 'Publish test results'
+            condition: always()
+
+          - task: PublishCodeCoverageResults@2
+            inputs:
+              summaryFileLocation: 'coverage/coverage.xml'
+              pathToSources: 'notebooks/'
+            displayName: 'Publish coverage'
+            condition: always()
+
+          # Validate DABs bundle against DEV target
+          - script: |
+              curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+              databricks bundle validate -t dev
+            displayName: 'Validate Databricks bundle'
+            env:
+              DATABRICKS_HOST: $(DATABRICKS_HOST_DEV)
+              DATABRICKS_TOKEN: $(DATABRICKS_TOKEN_DEV)
+
+          # Package everything for deployment
+          - task: CopyFiles@2
+            inputs:
+              SourceFolder: '$(Build.SourcesDirectory)'
+              Contents: |
+                notebooks/**
+                bundle/**
+                tests/**
+                sql/**
+              TargetFolder: '$(Build.ArtifactStagingDirectory)'
+            displayName: 'Stage artifacts'
+
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)'
+              artifactName: 'tvmaze-pipeline'
+            displayName: 'Publish artifacts'
+
+  # -------------------------------------------------------
+  # Deploy DEV: automatic after green build
+  # -------------------------------------------------------
+  - stage: DeployDev
+    displayName: 'Deploy to DEV'
+    dependsOn: Build
+    condition: succeeded()
+    variables:
+      - group: tvmaze-dev-variables
+    jobs:
+      - deployment: DeployToDev
+        displayName: 'Deploy DEV'
+        environment: 'tvmaze-dev'
+        pool:
+          vmImage: 'ubuntu-latest'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: DownloadPipelineArtifact@2
+                  inputs:
+                    artifactName: 'tvmaze-pipeline'
+                    targetPath: '$(Pipeline.Workspace)/tvmaze-pipeline'
+
+                - script: |
+                    curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+                  displayName: 'Install Databricks CLI'
+
+                - script: |
+                    cd $(Pipeline.Workspace)/tvmaze-pipeline
+                    databricks bundle deploy -t dev
+                  displayName: 'Deploy bundle to DEV'
+                  env:
+                    DATABRICKS_HOST: $(DATABRICKS_HOST)
+                    DATABRICKS_TOKEN: $(DATABRICKS_TOKEN)
+
+                # Kick off the pipeline job so we can verify end-to-end
+                - script: |
+                    cd $(Pipeline.Workspace)/tvmaze-pipeline
+                    databricks bundle run tvmaze-pipeline-job -t dev
+                  displayName: 'Run pipeline in DEV'
+                  env:
+                    DATABRICKS_HOST: $(DATABRICKS_HOST)
+                    DATABRICKS_TOKEN: $(DATABRICKS_TOKEN)
+
+  # TODO: add DeployAcc and DeployProd stages once approval gates
+  # are configured in Azure DevOps. Same pattern as DeployDev but
+  # with environment approval gates and condition on main branch.

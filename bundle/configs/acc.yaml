@@ -1,0 +1,13 @@
+# acc.yaml - ACC environment overrides
+
+variables:
+  databricks_host: "https://adb-2345678901234567.8.azuredatabricks.net"
+  catalog_name: "tvmaze_catalog_acc"
+  node_type_id: "Standard_DS4_v2"
+  num_workers: "2"
+  min_workers: 2
+  max_workers: 4
+  max_shows: "250"
+  schedule_pause_status: "PAUSED"  # manual triggers only
+
+# Key Vault: kv-tvmaze-acc / secret scope: tvmaze-acc-scope

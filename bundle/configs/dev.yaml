@@ -1,0 +1,13 @@
+# dev.yaml - DEV environment overrides
+
+variables:
+  databricks_host: "https://adb-1234567890123456.7.azuredatabricks.net"
+  catalog_name: "tvmaze_catalog_dev"
+  node_type_id: "Standard_DS3_v2"
+  num_workers: "1"
+  min_workers: 1
+  max_workers: 2
+  max_shows: "50"
+  schedule_pause_status: "PAUSED"  # no auto-schedule in DEV
+
+# Key Vault: kv-tvmaze-dev / secret scope: tvmaze-dev-scope

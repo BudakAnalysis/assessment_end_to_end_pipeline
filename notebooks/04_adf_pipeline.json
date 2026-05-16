@@ -1,0 +1,131 @@
+{
+  "name": "TVMaze_E2E_Pipeline",
+  "properties": {
+    "description": "End-to-end TVMaze data pipeline: API ingestion, Bronze, Silver, Gold.",
+    "activities": [
+      {
+        "name": "Fetch_Raw_Data_From_API",
+        "type": "DatabricksNotebook",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "01:00:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 60
+        },
+        "typeProperties": {
+          "notebookPath": "/Repos/tvmaze-pipeline/notebooks/01_bronze_ingestion",
+          "baseParameters": {
+            "catalog": {
+              "value": "@pipeline().parameters.catalog_name",
+              "type": "Expression"
+            },
+            "environment": {
+              "value": "@pipeline().parameters.environment",
+              "type": "Expression"
+            },
+            "max_shows": {
+              "value": "@pipeline().parameters.max_shows",
+              "type": "Expression"
+            }
+          }
+        },
+        "linkedServiceName": {
+          "referenceName": "ls_dbx_tvmaze_dev",
+          "type": "LinkedServiceReference"
+        }
+      },
+      {
+        "name": "Transform_Bronze_to_Silver",
+        "type": "DatabricksNotebook",
+        "dependsOn": [
+          {
+            "activity": "Fetch_Raw_Data_From_API",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "policy": {
+          "timeout": "01:00:00",
+          "retry": 1,
+          "retryIntervalInSeconds": 60
+        },
+        "typeProperties": {
+          "notebookPath": "/Repos/tvmaze-pipeline/notebooks/02_silver_transformations",
+          "baseParameters": {
+            "catalog": {
+              "value": "@pipeline().parameters.catalog_name",
+              "type": "Expression"
+            },
+            "environment": {
+              "value": "@pipeline().parameters.environment",
+              "type": "Expression"
+            }
+          }
+        },
+        "linkedServiceName": {
+          "referenceName": "ls_dbx_tvmaze_dev",
+          "type": "LinkedServiceReference"
+        }
+      },
+      {
+        "name": "Build_Gold_Aggregations",
+        "type": "DatabricksNotebook",
+        "dependsOn": [
+          {
+            "activity": "Transform_Bronze_to_Silver",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "policy": {
+          "timeout": "00:30:00",
+          "retry": 1,
+          "retryIntervalInSeconds": 60
+        },
+        "typeProperties": {
+          "notebookPath": "/Repos/tvmaze-pipeline/notebooks/03_gold_aggregations",
+          "baseParameters": {
+            "catalog": {
+              "value": "@pipeline().parameters.catalog_name",
+              "type": "Expression"
+            },
+            "environment": {
+              "value": "@pipeline().parameters.environment",
+              "type": "Expression"
+            }
+          }
+        },
+        "linkedServiceName": {
+          "referenceName": "ls_dbx_tvmaze_dev",
+          "type": "LinkedServiceReference"
+        }
+      }
+    ],
+    "parameters": {
+      "catalog_name": {
+        "type": "string",
+        "defaultValue": "tvmaze_catalog"
+      },
+      "environment": {
+        "type": "string",
+        "defaultValue": "dev"
+      },
+      "max_shows": {
+        "type": "string",
+        "defaultValue": "50"
+      }
+    },
+    "variables": {
+      "pipeline_run_id": {
+        "type": "String"
+      }
+    },
+    "annotations": [
+      "tvmaze",
+      "data-engineering"
+    ]
+  },
+  "type": "Microsoft.DataFactory/factories/pipelines"
+}

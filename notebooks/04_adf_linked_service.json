@@ -1,0 +1,25 @@
+{
+  "_comment": "ADF Linked Service for Databricks - token sourced from Azure Key Vault.",
+  "name": "ls_dbx_tvmaze_dev",
+  "properties": {
+    "type": "AzureDatabricks",
+    "typeProperties": {
+      "domain": "https://adb-dev.azuredatabricks.net",
+      "accessToken": {
+        "type": "AzureKeyVaultSecret",
+        "store": {
+          "referenceName": "ls_keyvault_tvmaze",
+          "type": "LinkedServiceReference"
+        },
+        "secretName": "databricks-token"
+      },
+      "existingClusterId": "@{linkedService().cluster_id}"
+    },
+    "parameters": {
+      "cluster_id": {
+        "type": "String"
+      }
+    }
+  },
+  "type": "Microsoft.DataFactory/factories/linkedservices"
+}

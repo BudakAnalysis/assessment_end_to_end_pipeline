@@ -1,0 +1,11 @@
+{
+  "_comment": "ADF Linked Service to Azure Key Vault - stores Databricks token, storage keys, etc.",
+  "name": "ls_keyvault_tvmaze",
+  "properties": {
+    "type": "AzureKeyVault",
+    "typeProperties": {
+      "baseUrl": "https://kv-tvmaze-dev.vault.azure.net/"
+    }
+  },
+  "type": "Microsoft.DataFactory/factories/linkedservices"
+}
